@@ -17,27 +17,28 @@ labelMap = {
     "family" : ["FAMILYNAME"],
     "specificEpithet" : ["SPECIES"],
     "locationAccordingTo" : ["SURVEYNAME"],
-    "identificationID" : ["FLORACODE"],
+    "organismID" : ["FLORACODE"],
+    "identificationID" : ["ï»¿KEY" ],
     "occurrenceRemarks" : ["SIGHTINGCOMM"]
 }
 
-# Generate reverse lookup from above dictionary
-labelLookup = {label: key for key, value in labelMap.items() for label in value}
+# Headers that should be converted to ISO 8601, and their format
+convertMap = {
+    "%d/%m/%y" : ["SIGHTINGDATE"]
+}
 
 # Columns to discard
 discard = [
-    "NSXCODE",
-    "ï»¿KEY" 
+    "NSXCODE"
 ]
 
-# Headers that should be converted to ISO 8601
-convertDate = {
-    "eventDate" : "%d/%m/%y"
-}
+# Generate reverse lookup from above dictionarys
+labelLookup = {colName: converted for converted, colList in labelMap.items() for colName in colList}
+convertLookup = {colName: fmt for fmt, colList in convertMap.items() for colName in colList}
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        print("Please give a path to a file to convert as argument.")
+        print("Please give a path to a csv file to convert as first arg, and path to an output file optionally as second arg.")
         sys.exit()
     
     inp = sys.argv[1]
@@ -45,31 +46,38 @@ if __name__ == "__main__":
         print("Invalid file type. Input file should be of type .csv")
         sys.exit()
 
+    if len(sys.argv) > 2:
+        out = sys.argv[2]
+        if not out.endswith(".csv"):
+            print("Output file should end with .csv")
+            sys.exit()
+    else:
+        out = "output.csv"
+
     with open(inp) as fp:
         data = fp.read()
 
     dataLines = data.split('\n')
 
-    ignoreCols = []
-    reformatDateCols = {}
+    ignoreCols = [] # list of column indexes to ignore
+    reformatDateCols = {} # dictionary of form {index: date format} for converting to ISO 8601
 
-    colHeaders = []
-    for ref, colName in enumerate(dataLines.pop(0).split(',')):
+    colHeaders = [] # list of converted headers
+    for ref, colName in enumerate(dataLines.pop(0).split(',')): # Pop first line to get headers
         if colName in discard:
             ignoreCols.append(ref)
             continue
 
-        header = labelLookup.get(colName, colName)
-        colHeaders.append(header)
+        if colName in convertLookup:
+            reformatDateCols[ref] = convertLookup[colName]
 
-        if header in convertDate:
-            reformatDateCols[ref] = convertDate[header]
+        colHeaders.append(labelLookup.get(colName, colName))
 
-    output = ",".join(colHeaders)
+    output = ",".join(colHeaders) # Create output from headers list
 
     while dataLines:
-        entry = dataLines.pop(0)
         lineValues = []
+        entry = dataLines.pop(0) # Pop columns to reduce memory overhead of potentially large files
         for ref, value in enumerate(entry.split(',')):
             if ref in ignoreCols:
                 continue
@@ -83,5 +91,5 @@ if __name__ == "__main__":
 
         output += f"\n{','.join(lineValues)}"
             
-    with open("output.csv", 'w') as fp:
+    with open(out, 'w') as fp:
         fp.write(output)
